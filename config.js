@@ -1,5 +1,5 @@
 module.exports = {
-  BOT_TOKEN: "8115246791:AAFe4k_c7n7JUWL-J1fsmLOksILIUsXtbxU",
+  BOT_TOKEN: "8115246791:",
 
   // ─── Identitas Bot ────────────────────────────────────────────────────────
   BOT_NAME: "Pterodactyl Panel Bot",
