@@ -1,0 +1,6 @@
+[2026-06-04 19:16:25] ⚙️  [FEATURES]             ✅ Semua fitur baru aktif (anti-spam, monitoring, friends, snapshot, dll)
+[2026-06-04 19:16:36] ⚙️  [LAUNCH]               ✅ Bot "Pterodactyl Panel Bot" berhasil dijalankan!
+[2026-06-04 19:16:36] ℹ️  [LAUNCH]               Expire check setiap 12 jam | Node check setiap 30 menit
+[2026-06-04 19:16:36] ⚙️  [EXPIRE_CHECK]         Menjalankan pengecekan panel expired...
+[2026-06-04 19:16:36] ℹ️  [LAUNCH]               Resource check aktif: setiap 5 menit, aksi="suspend"
+[2026-06-04 19:16:36] ℹ️  [LAUNCH]               Server down check aktif: setiap 5 menit
