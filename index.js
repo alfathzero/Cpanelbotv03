@@ -1374,7 +1374,12 @@ bot.command("info", (ctx) => {
     : `\n\n${tge("ERROR","❌")} "${nama}" belum start bot!`;
   text += botStatus;
 
-  ctx.reply(text, { parse_mode: "HTML" });
+  const kb = Markup.inlineKeyboard([
+    [Markup.button.callback("🗂️ Panel Saya", "my_panels"), Markup.button.callback("💎 Buat Panel", "create_panel")],
+    [Markup.button.callback("◀️ Menu Utama", "back_main")]
+  ]);
+
+  ctx.reply(text, { parse_mode: "HTML", ...kb });
 });
 
 // ─── /mypanels ────────────────────────────────────────────────────────────────
@@ -1422,7 +1427,8 @@ bot.command("ping", (ctx) => {
 bot.command("stats", (ctx) => {
   logger.sys("CMD", `User:${ctx.from.id} /stats`);
   if (!isOwner(ctx.from.id)) return ctx.reply(`${tge("ERROR","❌")} Hanya Owner.`);
-  sendStats(ctx);
+  const kb = Markup.inlineKeyboard([[Markup.button.callback("♻️ Refresh", "stats"), Markup.button.callback("◀️ Menu Utama", "back_main")]]);
+  ctx.reply(buildStatsText(), { parse_mode: "HTML", ...kb });
 });
 
 // ─── /nodes ───────────────────────────────────────────────────────────────────
@@ -1430,7 +1436,11 @@ bot.command("stats", (ctx) => {
 bot.command("nodes", async (ctx) => {
   logger.sys("CMD", `User:${ctx.from.id} /nodes`);
   if (!isOwner(ctx.from.id)) return ctx.reply(`${tge("ERROR","❌")} Hanya Owner.`);
-  await sendNodes(ctx);
+  const kb = Markup.inlineKeyboard([[Markup.button.callback("♻️ Refresh", "check_nodes"), Markup.button.callback("◀️ Menu Utama", "back_main")]]);
+  ctx.reply(`${tge("HOURGLASS","⏳")} Mengambil data node...`, { parse_mode: "HTML" }).then(async (m) => {
+    const text = await buildNodesText();
+    ctx.telegram.editMessageText(ctx.chat.id, m.message_id, undefined, text, { parse_mode: "HTML", ...kb });
+  });
 });
 
 // ─── /redeem ──────────────────────────────────────────────────────────────────
@@ -6024,12 +6034,17 @@ bot.command("totalserver", async (ctx) => {
   const result = await ptero.listServersPage(srvNum, 1, 1);
   try { await ctx.telegram.deleteMessage(ctx.chat.id, loadMsg.message_id); } catch {}
 
+  const kb = Markup.inlineKeyboard([
+    [Markup.button.callback("♻️ Refresh", `lsrv_${srvNum}_1`) /* reuse list server pg 1 */, Markup.button.callback("📑 List Server", `lsrv_${srvNum}_1`)],
+    [Markup.button.callback("◀️ Kembali", "back_main")]
+  ]);
+
   return ctx.reply(
     `📊 <b>Total Server — ${he2(serverLabel(srvNum))}</b>\n\n` +
     `🖥️ <b>Total Server:</b> <code>${result.totalCount.toLocaleString()}</code> server\n` +
     `📄 <b>Total Halaman API:</b> <code>${result.totalPages}</code> (50 server per halaman)\n\n` +
     `<i>Gunakan /listserver untuk lihat daftar lengkap.</i>`,
-    { parse_mode: "HTML" }
+    { parse_mode: "HTML", ...kb }
   );
 });
 
@@ -6084,8 +6099,13 @@ bot.command("servercpu", async (ctx) => {
 
   try { await ctx.telegram.deleteMessage(ctx.chat.id, loadMsg.message_id); } catch {}
 
+  const kb = Markup.inlineKeyboard([
+    [Markup.button.callback("♻️ Refresh", `srvcpu_${srvNum}`)],
+    [Markup.button.callback("◀️ Kembali", "back_main")]
+  ]);
+
   if (!cpuData.length)
-    return ctx.reply(`${tge("EMPTY_BOX","📭")} Tidak ada data CPU yang tersedia saat ini.`);
+    return ctx.reply(`${tge("EMPTY_BOX","📭")} Tidak ada data CPU yang tersedia saat ini.`, { parse_mode: "HTML", ...kb });
 
   let text =
     `⚙️ <b>Top CPU Usage — ${he2(serverLabel(srvNum))}</b>\n` +
@@ -6101,7 +6121,7 @@ bot.command("servercpu", async (ctx) => {
       `    🆔 <code>${d.id}</code>\n\n`;
   });
 
-  return ctx.reply(text, { parse_mode: "HTML" });
+  return ctx.reply(text, { parse_mode: "HTML", ...kb });
 });
 
 // ─── /listserver — alias for list server paginated ───────────────────────────
@@ -6142,6 +6162,44 @@ bot.action(/^ceksrv_\d+$/, async (ctx) => {
     [Markup.button.callback("◀️ Kembali", "back_main")],
   ]);
   return safeEdit(ctx, text, { parse_mode: "HTML", ...keyboard });
+});
+
+bot.action(/^srvcpu_\d+$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  const userId = ctx.from.id;
+  if (!isOwner(userId)) return;
+  const srvNum = parseInt(ctx.match[0].split("_")[1]) || 1;
+  const servers = await ptero.listServers(srvNum);
+  const notSusp = servers.filter(sv => !sv.attributes.suspended && sv.attributes.status !== "install_failed");
+  const CHECK_BATCH = 20;
+  const batch = notSusp.slice(0, CHECK_BATCH);
+  const resResults = await Promise.allSettled(batch.map(sv => ptero.getServerResources(sv.attributes.identifier, srvNum)));
+  const cpuData = [];
+  batch.forEach((sv, i) => {
+    const r = resResults[i];
+    if (r.status === "fulfilled" && r.value) {
+      const rs = r.value.resources || {};
+      cpuData.push({
+        name: sv.attributes.name || "N/A",
+        id: sv.attributes.id,
+        identifier: sv.attributes.identifier,
+        cpu: rs.cpu_absolute || 0,
+        ram: Math.round((rs.memory_bytes || 0) / 1024 / 1024),
+        disk: Math.round((rs.disk_bytes || 0) / 1024 / 1024),
+        state: r.value.current_state || "unknown",
+      });
+    }
+  });
+  cpuData.sort((a, b) => b.cpu - a.cpu);
+  const kb = Markup.inlineKeyboard([[Markup.button.callback("♻️ Refresh", `srvcpu_${srvNum}`)], [Markup.button.callback("◀️ Kembali", "back_main")]]);
+  if (!cpuData.length) return safeEdit(ctx, `${tge("EMPTY_BOX","📭")} Tidak ada data CPU yang tersedia.`, { parse_mode: "HTML", ...kb });
+  let text = `⚙️ <b>Top CPU Usage — ${he2(serverLabel(srvNum))}</b>\n<i>(${batch.length} server dicek)</i>\n\n`;
+  cpuData.slice(0, 15).forEach((d, i) => {
+    const stIcon = d.state === "running" ? "🟢" : d.state === "stopped" ? "🔴" : "⚪";
+    const bar = "█".repeat(Math.min(10, Math.round(d.cpu / 10))) + "░".repeat(Math.max(0, 10 - Math.round(d.cpu / 10)));
+    text += `${i+1}. ${stIcon} <b>${he(d.name.slice(0, 25))}</b>\n    ⚙️ CPU: <b>${d.cpu.toFixed(1)}%</b>  |${bar}|\n    💾 RAM: ${d.ram}MB  •  💿 Disk: ${d.disk}MB\n    🆔 <code>${d.id}</code>\n\n`;
+  });
+  return safeEdit(ctx, text, { parse_mode: "HTML", ...kb });
 });
 
 // ════════════════════════════════════════════════════════════════════════════════
@@ -6474,44 +6532,37 @@ bot.command("play", async (ctx) => {
 
     try { await ctx.telegram.deleteMessage(ctx.chat.id, wait.message_id); } catch {}
 
+    const ytSearchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(`${track.name} ${artists}`)}`;
+    const kb = Markup.inlineKeyboard([
+      [Markup.button.url("📺 Cari di YouTube", ytSearchUrl)],
+      [Markup.button.url("🟢 Buka di Spotify", spLink)]
+    ]);
+
     if (prevUrl) {
       // Download 30-sec preview dan kirim sebagai audio
       const audioResp = await axios.get(prevUrl, { responseType: "arraybuffer", timeout: 30000 });
       const audioBuf  = Buffer.from(audioResp.data);
 
-      if (imgUrl) {
-        // Kirim sebagai audio dengan thumbnail
-        return ctx.replyWithAudio(
-          { source: audioBuf, filename: `${track.name}.mp3` },
-          {
-            title:     track.name,
-            performer: artists,
-            caption:   caption + "\n\n<i>⏱️ Preview 30 detik dari Spotify</i>",
-            parse_mode: "HTML",
-          }
-        );
-      } else {
-        return ctx.replyWithAudio(
-          { source: audioBuf, filename: `${track.name}.mp3` },
-          {
-            title:      track.name,
-            performer:  artists,
-            caption:    caption + "\n\n<i>⏱️ Preview 30 detik dari Spotify</i>",
-            parse_mode: "HTML",
-          }
-        );
-      }
+      const opts = {
+        title:     track.name,
+        performer: artists,
+        caption:   caption + "\n\n<i>⏱️ Preview 30 detik dari Spotify</i>",
+        parse_mode: "HTML",
+        ...kb
+      };
+
+      return ctx.replyWithAudio({ source: audioBuf, filename: `${track.name}.mp3` }, opts);
     } else {
       // Tidak ada preview URL (hak cipta) — kirim info + link
       const infoText =
         `${caption}\n\n` +
         `<i>⚠️ Preview 30 detik tidak tersedia untuk lagu ini (mungkin karena hak cipta).\n` +
-        `Gunakan link di atas untuk mendengarkan.</i>`;
+        `Gunakan tombol di bawah untuk mencari di YouTube.</i>`;
 
       if (imgUrl) {
-        return ctx.replyWithPhoto(imgUrl, { caption: infoText, parse_mode: "HTML" });
+        return ctx.replyWithPhoto(imgUrl, { caption: infoText, parse_mode: "HTML", ...kb });
       } else {
-        return ctx.reply(infoText, { parse_mode: "HTML" });
+        return ctx.reply(infoText, { parse_mode: "HTML", ...kb });
       }
     }
   } catch (e) {
