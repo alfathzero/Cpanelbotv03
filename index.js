@@ -1,5 +1,6 @@
 const { Telegraf, Markup } = require("telegraf");
 const { message } = require("telegraf/filters");
+const axios = require("axios");
 const os = require("os");
 const fs = require("fs");
 const path = require("path");
@@ -45,11 +46,11 @@ function mono(s) {
   return pmode() === "HTML" ? `<code>${he2(s)}</code>` : `\`${s}\``;
 }
 
-const db = require("./core/database");
-const ptero = require("./core/pterodactyl");
-const features = require("./utils/features");
-const monitor  = require("./core/monitor");
-const i18n = require("./utils/i18n");
+const db = require("./Core/database");
+const ptero = require("./Core/pterodactyl");
+const features = require("./Utils/features");
+const monitor  = require("./Core/monitor");
+const i18n = require("./Utils/i18n");
 
 // ─── Multi-Server Helpers ─────────────────────────────────────────────────────
 // Server 1 = panel utama; Server 2 = panel kedua (hanya owner secara default).
@@ -252,7 +253,7 @@ bot.use(async (ctx, next) => {
 
 // ─── Logger ───────────────────────────────────────────────────────────────────
 
-const logger = require("./utils/logger");
+const logger = require("./Utils/logger");
 const botLog = (level, tag, msg, err) => logger.log(level, tag, msg, err);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -1506,7 +1507,7 @@ bot.on("callback_query", async (ctx) => {
     // ── Language selection ─────────────────────────────────────────────
     if (data.startsWith("setlang_")) {
       const code = data.replace("setlang_", "");
-      const { t: tI, LANG_NAMES } = require("./i18n");
+      const { t: tI, LANG_NAMES } = require("./Utils/i18n");
       const curLang = db.getUserLang(userId) || "id";
       db.setUserLang(userId, code);
       const newName = LANG_NAMES[code] || code;
